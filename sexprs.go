@@ -1,3 +1,9 @@
+// Copyright 2013 Robert A. Uhl.  All rights reserved.
+// Use of this source code is goverend by an MIT-style license which may
+// be found in the LICENSE file.
+
+// Package sexprs implements Ron Rivest's canonical s-expression
+// <URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.
 package sexprs
 
 import (
