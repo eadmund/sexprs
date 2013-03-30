@@ -23,27 +23,27 @@ var (
 	stringChar       = append(tokenChar, append(hexadecimalDigit, []byte("\"|#")...)...)
 )
 
-type Sexpr interface {
-	ToAdvanced() string
-	toAdvanced(*bytes.Buffer)
-	ToCanonical() []byte
-	toCanonical(*bytes.Buffer)
+type Sexp interface {
+	String() string
+	string(*bytes.Buffer)
+	Pack() []byte
+	pack(*bytes.Buffer)
 }
 
-type List []Sexpr
+type List []Sexp
 
 type Atom struct {
 	DisplayHint []byte
 	Value       []byte
 }
 
-func (a Atom) ToCanonical() []byte {
+func (a Atom) Pack() []byte {
 	buf := bytes.NewBuffer(nil)
-	a.toCanonical(buf)
+	a.pack(buf)
 	return buf.Bytes()
 }
 
-func (a Atom) toCanonical(buf *bytes.Buffer) {
+func (a Atom) pack(buf *bytes.Buffer) {
 	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
 		buf.WriteString("[" + strconv.Itoa(len(a.DisplayHint)) + ":")
 		buf.Write(a.DisplayHint)
@@ -53,51 +53,51 @@ func (a Atom) toCanonical(buf *bytes.Buffer) {
 	buf.Write(a.Value)
 }
 
-func (a Atom) ToAdvanced() string {
+func (a Atom) String() string {
 	buf := bytes.NewBuffer(nil)
-	a.toAdvanced(buf)
+	a.string(buf)
 	return buf.String()
 }
 
-func (a Atom) toAdvanced(buf *bytes.Buffer) {
+func (a Atom) string(buf *bytes.Buffer) {
 	buf.WriteString(strconv.Itoa(len(a.Value)) + ":")
 	buf.Write(a.Value)
 }
 
-func (l List) ToCanonical() []byte {
+func (l List) Pack() []byte {
 	buf := bytes.NewBuffer(nil)
-	l.toCanonical(buf)
+	l.pack(buf)
 	return buf.Bytes()
 }
 
-func (l List) toCanonical(buf *bytes.Buffer) {
+func (l List) pack(buf *bytes.Buffer) {
 	buf.WriteString("(")
 	for _, datum := range l {
-		datum.toCanonical(buf)
+		datum.pack(buf)
 	}
 	buf.WriteString(")")
 }
 
-func (l List) ToAdvanced() string {
+func (l List) String() string {
 	buf := bytes.NewBuffer(nil)
-	l.toAdvanced(buf)
+	l.string(buf)
 	return buf.String()
 }
 
-func (l List) toAdvanced(buf *bytes.Buffer) {
+func (l List) string(buf *bytes.Buffer) {
 	buf.WriteString("(")
 	for _, datum := range l {
-		datum.toAdvanced(buf)
+		datum.string(buf)
 	}
 	buf.WriteString(")")
 }
 
-func ParseBytes(bytes []byte) (sexpr Sexpr, rest []byte, err error) {
-	return parseSexpr(bytes)
+func ReadBytes(bytes []byte) (sexpr Sexp, rest []byte, err error) {
+	return parseSexp(bytes)
 
 }
 
-func parseSexpr(s []byte) (sexpr Sexpr, rest []byte, err error) {
+func parseSexp(s []byte) (sexpr Sexp, rest []byte, err error) {
 	first, rest := s[0], s[1:]
 	switch {
 	case first == byte('('):
@@ -113,14 +113,14 @@ func parseSexpr(s []byte) (sexpr Sexpr, rest []byte, err error) {
 
 func parseList(s []byte) (l List, rest []byte, err error) {
 	acc := make(List, 0)
-	var sexpr Sexpr
+	var sexpr Sexp
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
 		case c == byte(')'):
 			return acc, s[i:], nil
 		case bytes.IndexByte(whitespaceChar, c) == -1:
-			sexpr, s, err = parseSexpr(s[i:])
+			sexpr, s, err = parseSexp(s[i:])
 			if err != nil {
 				return nil, nil, err
 			}
