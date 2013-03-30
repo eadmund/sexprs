@@ -1,4 +1,4 @@
-package canonical
+package sexprs
 
 import (
 	"bytes"
