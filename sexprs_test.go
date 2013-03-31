@@ -92,5 +92,8 @@ func TestTransport(t *testing.T) {
 	if !s1.Equal(s2) {
 		t.Fatal("Transport and non-transport-loaded S-expressions are not equal")
 	}
+	if s2.Base64String() != ("{KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}") {
+		t.Fatal("Transport encoding failed")
+	}
 	t.Log(string(s1.Pack()))
 }
