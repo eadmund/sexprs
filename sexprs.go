@@ -28,7 +28,7 @@
 // 
 // There is also a transport encoding (intended for use in 7-bit transport
 // modes), delimited with {}:
-//    {"KDM6Zm9vMzpiYXJbMzpiaW5dODpxdXV4KQ=="}
+//    {KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}
 //
 package sexprs
 
@@ -56,17 +56,27 @@ var (
 )
 
 // Sexp is the interface implemented by any object with an S-expression
-// representation.
+// representation.  It's not really intended to be implemented outside
+// of sexprs, although it's certainly possible.
 type Sexp interface {
 	// String returns an advanced representation of the object, with
 	// no line breaks.
 	String() string
 	string(*bytes.Buffer)
+
 	// Pack returns the canonical representation of the object.  It
 	// will always return the same sequence of bytes for the same
 	// object.
 	Pack() []byte
 	pack(*bytes.Buffer)
+
+	// PackedLen returns the size in bytes of the canonical
+	// representation.
+	PackedLen() int
+
+	// Equal will return true if its receiver and argument are
+	// identical.
+	Equal(b Sexp) bool
 }
 
 type List []Sexp
@@ -92,6 +102,17 @@ func (a Atom) pack(buf *bytes.Buffer) {
 	buf.Write(a.Value)
 }
 
+func (a Atom) PackedLen() (size int) {
+	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
+		size += 3 // [:]
+		size += len(strconv.Itoa(len(a.DisplayHint))) // decimal length
+		size += len(a.DisplayHint)
+	}
+	size += len(strconv.Itoa(len(a.DisplayHint)))
+	size++ // :
+	return size + len(a.Value)
+}
+
 func (a Atom) String() string {
 	buf := bytes.NewBuffer(nil)
 	a.string(buf)
@@ -101,6 +122,16 @@ func (a Atom) String() string {
 func (a Atom) string(buf *bytes.Buffer) {
 	buf.WriteString(strconv.Itoa(len(a.Value)) + ":")
 	buf.Write(a.Value)
+}
+
+func (a Atom) Equal(b Sexp) bool {
+	switch b := b.(type) {
+	case Atom:
+		return bytes.Equal(a.DisplayHint, b.DisplayHint) && bytes.Equal(a.Value, b.Value)
+	default:
+		return false
+	}
+	return false
 }
 
 func (l List) Pack() []byte {
@@ -131,6 +162,33 @@ func (l List) string(buf *bytes.Buffer) {
 	buf.WriteString(")")
 }
 
+func (a List) Equal(b Sexp) bool {
+	switch b := b.(type) {
+	case List:
+		if len(a) != len(b) {
+			return false
+		} else {
+			for i := range a {
+				if !a[i].Equal(b[i]) {
+					return false
+				}
+			}
+			return true
+		}
+	default:
+		return false
+	}
+	return false
+}
+
+func (l List) PackedLen() (size int) {
+	size = 2 // ()
+	for _, element := range l {
+		size += element.PackedLen()
+	}
+	return size
+}
+
 func ReadBytes(bytes []byte) (sexpr Sexp, rest []byte, err error) {
 	return parseSexp(bytes)
 
@@ -141,7 +199,9 @@ func parseSexp(s []byte) (sexpr Sexp, rest []byte, err error) {
 	switch {
 	case first == byte('('):
 		return parseList(rest)
-	case bytes.IndexByte(stringChar, first) > -1:
+	case first == byte('{'):
+		return parseTransport(rest)
+	case bytes.IndexByte(stringChar, first) > -1, first == byte('['):
 		return parseAtom(s)
 	default:
 		return nil, rest, fmt.Errorf("Unrecognised character at start of s-expression: %c", first)
@@ -178,6 +238,7 @@ func parseAtom(s []byte) (a Atom, rest []byte, err error) {
 		if err != nil {
 			return Atom{}, rest, err
 		}
+		s = s[1:]
 	}
 	value, rest, err = parseSimpleString(s)
 	if err != nil {
@@ -219,7 +280,7 @@ func parseSimpleString(s []byte) (str, rest []byte, err error) {
 			str = s[0:i]
 			return str, s[i:], nil
 		}
-		return nil, nil, fmt.Errorf("Unknown char %c parsing simple string")
+		return nil, nil, fmt.Errorf("Unknown char %c parsing simple string", s[0])
 	}
 	if err != nil {
 		return nil, nil, err
@@ -349,4 +410,19 @@ func parseQuotedString(s []byte, length int) (decimal, rest []byte, err error) {
 		}
 	}
 	return nil, nil, fmt.Errorf("Unexpected end of quoted string")
+}
+
+func parseTransport(s []byte) (sexp Sexp, rest []byte, err error) {
+	for i := range s {
+		if s[i] == byte('}') {
+			decoded := make([]byte, base64Decoder.DecodedLen(i))
+			length, err := base64Decoder.Decode(decoded, s[0:i])
+			if err != nil {
+				return nil, nil, err
+			}
+			sexp, rest, err = parseSexp(decoded[:length])
+			return sexp, s[i+1:], err
+		}
+	}
+	return nil, nil, fmt.Errorf("Expected '}' to terminate transport representation")
 }

@@ -43,7 +43,7 @@ func TestParseEmptyList(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	s, _, err := ReadBytes([]byte("(test)"))
+	s, _, err := ReadBytes([]byte("([text]test)"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,4 +78,19 @@ func TestParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
+}
+
+func TestTransport(t *testing.T) {
+	s1, _, err := ReadBytes([]byte("{KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2, _, err := ReadBytes([]byte("(3:foo3:bar[3:bin]8:baz quux)"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s1.Equal(s2) {
+		t.Fatal("Transport and non-transport-loaded S-expressions are not equal")
+	}
+	t.Log(string(s1.Pack()))
 }
