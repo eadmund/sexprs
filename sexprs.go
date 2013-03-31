@@ -217,7 +217,7 @@ func parseList(s []byte) (l List, rest []byte, err error) {
 		c := s[i]
 		switch {
 		case c == byte(')'):
-			return acc, s[i:], nil
+			return acc, s[i+1:], nil
 		case bytes.IndexByte(whitespaceChar, c) == -1:
 			sexpr, s, err = parseSexp(s[i:])
 			if err != nil {
@@ -421,6 +421,9 @@ func parseTransport(s []byte) (sexp Sexp, rest []byte, err error) {
 				return nil, nil, err
 			}
 			sexp, rest, err = parseSexp(decoded[:length])
+			if len(rest) != 0 {
+				return nil, nil, fmt.Errorf("Expected complete single transport-encoded S-expression")
+			}
 			return sexp, s[i+1:], err
 		}
 	}

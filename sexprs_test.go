@@ -48,7 +48,7 @@ func TestParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("(4:test3:foo(baz)"))
+	s, _, err = ReadBytes([]byte("(4:test3:foo(baz))"))
 	if err != nil {
 		t.Fatal(err)
 	}
