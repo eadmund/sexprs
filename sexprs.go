@@ -51,7 +51,7 @@ var (
 	whitespaceChar   = []byte(" \t\r\n")
 	base64Char       = append(alpha, append(decimalDigit, []byte("+/=")...)...)
 	tokenChar        = append(alpha, append(decimalDigit, simplePunc...)...)
-	base64Decoder    = base64.StdEncoding
+	base64Encoding    = base64.StdEncoding
 	stringChar       = append(tokenChar, append(hexadecimalDigit, []byte("\"|#")...)...)
 )
 
@@ -63,6 +63,10 @@ type Sexp interface {
 	// no line breaks.
 	String() string
 	string(*bytes.Buffer)
+
+	// Base64String returns a transport-encoded rendering of the
+	// S-expression
+	Base64String() string
 
 	// Pack returns the canonical representation of the object.  It
 	// will always return the same sequence of bytes for the same
@@ -124,6 +128,10 @@ func (a Atom) string(buf *bytes.Buffer) {
 	buf.Write(a.Value)
 }
 
+func (a Atom) Base64String() (s string) {
+	return "{" + base64Encoding.EncodeToString(a.Pack()) + "}"
+}
+
 func (a Atom) Equal(b Sexp) bool {
 	switch b := b.(type) {
 	case Atom:
@@ -146,6 +154,10 @@ func (l List) pack(buf *bytes.Buffer) {
 		datum.pack(buf)
 	}
 	buf.WriteString(")")
+}
+
+func (l List) Base64String() string {
+	return "{" + base64Encoding.EncodeToString(l.Pack()) + "}"
 }
 
 func (l List) String() string {
@@ -327,8 +339,8 @@ func parseBase64(s []byte) (decimal, rest []byte, err error) {
 				return nil, nil, fmt.Errorf("Expected | to terminate Base64 string")
 			}
 			base64 := s[0:i]
-			decimal = make([]byte, base64Decoder.DecodedLen(len(base64)))
-			length, err := base64Decoder.Decode(decimal, base64)
+			decimal = make([]byte, base64Encoding.DecodedLen(len(base64)))
+			length, err := base64Encoding.Decode(decimal, base64)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -415,8 +427,8 @@ func parseQuotedString(s []byte, length int) (decimal, rest []byte, err error) {
 func parseTransport(s []byte) (sexp Sexp, rest []byte, err error) {
 	for i := range s {
 		if s[i] == byte('}') {
-			decoded := make([]byte, base64Decoder.DecodedLen(i))
-			length, err := base64Decoder.Decode(decoded, s[0:i])
+			decoded := make([]byte, base64Encoding.DecodedLen(i))
+			length, err := base64Encoding.Decode(decoded, s[0:i])
 			if err != nil {
 				return nil, nil, err
 			}
