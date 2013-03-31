@@ -2,8 +2,34 @@
 // Use of this source code is goverend by an MIT-style license which may
 // be found in the LICENSE file.
 
-// Package sexprs implements Ron Rivest's canonical s-expression
+// Package sexprs implements Ron Rivest's canonical S-expressions
 // <URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.
+//
+// Canonical S-expressions are a compact, easy-to-parse, ordered,
+// hashable data representation ideal for cryptographic operations.
+// They are simpler and more compact than either JSON or XML.
+//
+// An S-expression is composed of lists and atoms.  An atom is a string
+// of bytes, with an optional display hint, also a byte string.  A list
+// can contain zero or more atoms or lists.
+//
+// There are two representations of an S-expression: the canonical
+// representation is a byte-oriented, packed representation, while the
+// advanced representation is string-oriented and more traditional in
+// appearance.
+//
+// The S-expression ("foo" "bar" ["bin"]"baz quux") is canonically:
+//    (3:foo3:bar[3:bin]8:quux)
+//
+// Among the valid advanced representations are:
+//    (foo 3:bar [bin]"baz quux")
+// and:
+//    ("foo" #626172# [3:bin]|YmF6IHF1dXg=|)
+// 
+// There is also a transport encoding (intended for use in 7-bit transport
+// modes), delimited with {}:
+//    {"KDM6Zm9vMzpiYXJbMzpiaW5dODpxdXV4KQ=="}
+//
 package sexprs
 
 import (
@@ -29,9 +55,16 @@ var (
 	stringChar       = append(tokenChar, append(hexadecimalDigit, []byte("\"|#")...)...)
 )
 
+// Sexp is the interface implemented by any object with an S-expression
+// representation.
 type Sexp interface {
+	// String returns an advanced representation of the object, with
+	// no line breaks.
 	String() string
 	string(*bytes.Buffer)
+	// Pack returns the canonical representation of the object.  It
+	// will always return the same sequence of bytes for the same
+	// object.
 	Pack() []byte
 	pack(*bytes.Buffer)
 }
