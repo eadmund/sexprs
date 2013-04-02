@@ -1,9 +1,12 @@
 // Copyright 2013 Robert A. Uhl.  All rights reserved.
-// Use of this source code is goverend by an MIT-style license which may
+// Use of this source code is governed by an MIT-style license which may
 // be found in the LICENSE file.
 
 // Package sexprs implements Ron Rivest's canonical S-expressions
-// <URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.
+// <URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.  I'm
+// indebted to Inferno's sexprs(2), whose API I first accidentally,
+// and then deliberately, mimicked.  I've copied much of its style,
+// only making it more Go-like.
 //
 // Canonical S-expressions are a compact, easy-to-parse, ordered,
 // hashable data representation ideal for cryptographic operations.

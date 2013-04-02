@@ -3,7 +3,10 @@
     import "github.com/eadmund/sexprs"
 
 Package sexprs implements Ron Rivest's canonical S-expressions
-<URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.
+<URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.  I'm
+indebted to Inferno's sexprs(2), whose API I first accidentally,
+and then deliberately, mimicked.  I've copied much of its style,
+only making it more Go-like.
 
 Canonical S-expressions are a compact, easy-to-parse, ordered,
 hashable data representation ideal for cryptographic operations.
