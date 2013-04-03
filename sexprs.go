@@ -457,3 +457,8 @@ func parseTransport(s []byte) (sexp Sexp, rest []byte, err error) {
 	}
 	return nil, nil, fmt.Errorf("Expected '}' to terminate transport representation")
 }
+
+func IsList(s Sexp) bool {
+	s, ok := s.(List)
+	return ok
+}

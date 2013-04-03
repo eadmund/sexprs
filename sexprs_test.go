@@ -97,3 +97,20 @@ func TestTransport(t *testing.T) {
 	}
 	t.Log(string(s1.Pack()))
 }
+
+func TestIsList(t *testing.T) {
+	s, _, err := ReadBytes([]byte("(abc efg-hijk )"))
+	if err != nil {
+		t.Fatal("Could not parse list", err)
+	}
+	if !IsList(s) {
+		t.Fatal("List considered not-List")
+	}
+	s, _, err = ReadBytes([]byte("abc"))
+	if err != nil {
+		t.Fatal("Could not parse atom", err)
+	}
+	if IsList(s) {
+		t.Fatal("Atom considered List")
+	}
+}
