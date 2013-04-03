@@ -54,7 +54,7 @@ var (
 	whitespaceChar   = []byte(" \t\r\n")
 	base64Char       = append(alpha, append(decimalDigit, []byte("+/=")...)...)
 	tokenChar        = append(alpha, append(decimalDigit, simplePunc...)...)
-	base64Encoding    = base64.StdEncoding
+	base64Encoding   = base64.StdEncoding
 	stringChar       = append(tokenChar, append(hexadecimalDigit, []byte("\"|#")...)...)
 )
 
@@ -111,7 +111,7 @@ func (a Atom) pack(buf *bytes.Buffer) {
 
 func (a Atom) PackedLen() (size int) {
 	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
-		size += 3 // [:]
+		size += 3                                     // [:]
 		size += len(strconv.Itoa(len(a.DisplayHint))) // decimal length
 		size += len(a.DisplayHint)
 	}
@@ -337,9 +337,9 @@ func parseHexadecimal(s []byte) (str, rest []byte, err error) {
 
 func parseBase64(s []byte) (decimal, rest []byte, err error) {
 	for i := range s {
-		if bytes.IndexByte(hexadecimalDigit, s[i]) < 0 {
+		if bytes.IndexByte(base64Char, s[i]) < 0 {
 			if s[i] != byte('|') {
-				return nil, nil, fmt.Errorf("Expected | to terminate Base64 string")
+				return nil, nil, fmt.Errorf("Expected | to terminate Base64 string; found %c", rune(s[i]))
 			}
 			base64 := s[0:i]
 			decimal = make([]byte, base64Encoding.DecodedLen(len(base64)))
@@ -347,7 +347,7 @@ func parseBase64(s []byte) (decimal, rest []byte, err error) {
 			if err != nil {
 				return nil, nil, err
 			}
-			return base64[:length], s[i:], nil
+			return base64[:length], s[i+1:], nil
 		}
 	}
 	return nil, nil, fmt.Errorf("Unexpected end of Base64 value")

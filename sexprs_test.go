@@ -18,14 +18,14 @@ func TestAtomToString(t *testing.T) {
 }
 
 func TestSlice(t *testing.T) {
-	slice := []Sexp{Atom{Value:[]byte("Foo")}, 
-		Atom{Value:[]byte("bar")}}
+	slice := []Sexp{Atom{Value: []byte("Foo")},
+		Atom{Value: []byte("bar")}}
 	_ = slice
 }
 
 func TestList(t *testing.T) {
 	var a Atom
-	a = Atom{Value:[]byte("This is a test")}
+	a = Atom{Value: []byte("This is a test")}
 	var l Sexp
 	l = List{a}
 	if l == nil {
