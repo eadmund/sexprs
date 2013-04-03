@@ -73,7 +73,7 @@ func TestParse(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("(#7a# bar |Zm9vYmFyYmF6| {Zm9vYmFyYmF6})"))
+	s, _, err = ReadBytes([]byte("(#7a # bar (|Zm9vYmFy YmF6|)\"foo bar\\r\"{Zm9vYmFyYmF6})"))
 	if err != nil {
 		t.Fatal(err)
 	}

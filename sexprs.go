@@ -319,35 +319,48 @@ func parseDecimal(s []byte) (decimal, rest []byte, err error) {
 }
 
 func parseHexadecimal(s []byte) (str, rest []byte, err error) {
+	acc := make([]byte, 0, 2) // minimum hex string length
 	for i := range s {
-		if bytes.IndexByte(hexadecimalDigit, s[i]) < 0 {
-			if s[i] != byte('#') {
+		c := s[i]
+		switch {
+		case bytes.IndexByte(whitespaceChar, c) >= 0:
+			continue
+		case bytes.IndexByte(hexadecimalDigit, c) < 0:
+			if c != byte('#') {
 				return nil, nil, fmt.Errorf("Expected # to terminate hexadecimal string; found %c", s[i])
 			}
 			str := make([]byte, hex.DecodedLen(i))
-			length, err := hex.Decode(str, s[0:i])
+			length, err := hex.Decode(str, acc)
 			if err != nil {
 				return nil, nil, err
 			}
 			return str[:length], s[i+1:], nil
+		default:
+			acc = append(acc, c)
 		}
 	}
 	return nil, nil, fmt.Errorf("Unexpected end of hexadecimal value")
 }
 
-func parseBase64(s []byte) (decimal, rest []byte, err error) {
+func parseBase64(s []byte) (b, rest []byte, err error) {
+	acc := make([]byte, 0, 4) // minimum base64 string length
 	for i := range s {
-		if bytes.IndexByte(base64Char, s[i]) < 0 {
-			if s[i] != byte('|') {
-				return nil, nil, fmt.Errorf("Expected | to terminate Base64 string; found %c", rune(s[i]))
+		c := s[i]
+		switch {
+		case bytes.IndexByte(whitespaceChar, c) >= 0:
+			continue
+		case bytes.IndexByte(base64Char, c) < 0:
+			if c != byte('|') {
+				return nil, nil, fmt.Errorf("Expected | to terminate Base64 string; found %c", c)
 			}
-			base64 := s[0:i]
-			decimal = make([]byte, base64Encoding.DecodedLen(len(base64)))
-			length, err := base64Encoding.Decode(decimal, base64)
+			b = make([]byte, base64Encoding.DecodedLen(len(acc)))
+			length, err := base64Encoding.Decode(b, acc)
 			if err != nil {
 				return nil, nil, err
 			}
-			return base64[:length], s[i+1:], nil
+			return b[:length], s[i+1:], nil
+		default:
+			acc = append(acc, s[i])
 		}
 	}
 	return nil, nil, fmt.Errorf("Unexpected end of Base64 value")
