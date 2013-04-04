@@ -146,9 +146,7 @@ type Sexp interface {
 }
 ```
 
-Sexp is the interface implemented by any object with an S-expression
-representation. It's not really intended to be implemented outside of sexprs,
-although it's certainly possible.
+Sexp is the interface implemented by both lists and atoms.
 
 #### func  ReadBytes
 

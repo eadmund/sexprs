@@ -59,9 +59,7 @@ var (
 	stringEncChar    = append(stringChar, []byte("\b\t\v\n\f\r\"'\\ ")...)
 )
 
-// Sexp is the interface implemented by any object with an S-expression
-// representation.  It's not really intended to be implemented outside
-// of sexprs, although it's certainly possible.
+// Sexp is the interface implemented by both lists and atoms.
 type Sexp interface {
 	// String returns an advanced representation of the object, with
 	// no line breaks.
