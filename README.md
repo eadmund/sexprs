@@ -35,6 +35,12 @@ modes), delimited with {}:
 
 ## Usage
 
+#### func  IsList
+
+```go
+func IsList(s Sexp) bool
+```
+
 #### type Atom
 
 ```go

@@ -56,6 +56,7 @@ var (
 	tokenChar        = append(alpha, append(decimalDigit, simplePunc...)...)
 	base64Encoding   = base64.StdEncoding
 	stringChar       = append(tokenChar, append(hexadecimalDigit, []byte("\"|#")...)...)
+	stringEncChar    = append(stringChar, []byte("\b\t\v\n\f\r\"'\\ ")...)
 )
 
 // Sexp is the interface implemented by any object with an S-expression
@@ -126,9 +127,89 @@ func (a Atom) String() string {
 	return buf.String()
 }
 
+const (
+	tokenEnc = iota
+	quotedEnc
+	base64Enc
+)
+
+// write a string in a legible encoding to buf
+func writeString(buf *bytes.Buffer, a []byte) {
+	// test to see what sort of encoding is best to use
+	encoding := tokenEnc
+	acc := make([]byte, len(a), len(a))
+	for i, c := range a {
+		acc[i] = c
+		switch {
+		case bytes.IndexByte(tokenChar, c) > -1:
+			continue
+		case (encoding == tokenEnc) && bytes.IndexByte(stringEncChar, c) > -1:
+			encoding = quotedEnc
+			strAcc := make([]byte, i, len(a))
+			copy(strAcc, acc)
+			for j := i; j < len(a); j++ {
+				c := a[j]
+				if bytes.IndexByte(stringEncChar, c) < 0 {
+					encoding = base64Enc
+					break
+				}
+				switch c {
+				case '\b':
+					acc = append(strAcc, []byte("\\b")...)
+				case '\t':
+					strAcc = append(strAcc, []byte("\\t")...)
+				case '\v':
+					strAcc = append(strAcc, []byte("\\v")...)
+				case '\n':
+					strAcc = append(strAcc, []byte("\\n")...)
+				case '\f':
+					strAcc = append(strAcc, []byte("\\f")...)
+				case '"':
+					strAcc = append(strAcc, []byte("\\\"")...)
+				case '\'':
+					strAcc = append(strAcc, []byte("'")...)
+				case '\\':
+					strAcc = append(strAcc, []byte("\\\\")...)
+				case '\r':
+					strAcc = append(strAcc, []byte("\\r")...)
+				default:
+					strAcc = append(strAcc, c)
+				}
+			}
+			if encoding == quotedEnc {
+				buf.WriteString("\"")
+				buf.Write(strAcc)
+				buf.WriteString("\"")
+				return
+			}
+		default:
+			encoding = base64Enc
+			break
+		}
+	}
+	switch encoding {
+	case base64Enc:
+		buf.WriteString("|" + base64Encoding.EncodeToString(acc) + "|")
+	case tokenEnc:
+		buf.Write(acc)
+	default:
+		panic("Encoding is neither base64 nor token")
+	}
+
+}
+
 func (a Atom) string(buf *bytes.Buffer) {
-	buf.WriteString(strconv.Itoa(len(a.Value)) + ":")
-	buf.Write(a.Value)
+	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
+		buf.WriteString("[")
+		writeString(buf, a.DisplayHint)
+		buf.WriteString("]")
+	}
+	if len(a.Value) == 0 {
+		buf.WriteString("")
+	} else {
+		writeString(buf, a.Value)
+	}
+	return
 }
 
 func (a Atom) Base64String() (s string) {
@@ -171,8 +252,11 @@ func (l List) String() string {
 
 func (l List) string(buf *bytes.Buffer) {
 	buf.WriteString("(")
-	for _, datum := range l {
+	for i, datum := range l {
 		datum.string(buf)
+		if i < len(l)-1 {
+			buf.WriteString(" ")
+		}
 	}
 	buf.WriteString(")")
 }
