@@ -5,8 +5,9 @@
 package sexprs
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
+	"io"
 	"testing"
 )
 
@@ -36,7 +37,7 @@ func TestList(t *testing.T) {
 }
 
 func TestParseEmptyList(t *testing.T) {
-	l, _, err := ReadBytes([]byte("()"))
+	l, _, err := Parse([]byte("()"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,52 +45,61 @@ func TestParseEmptyList(t *testing.T) {
 }
 
 func TestParse(t *testing.T) {
-	s, _, err := ReadBytes([]byte("([text]test)"))
+	s, _, err := Parse([]byte("([text]test)"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("(4:test3:foo(baz))"))
+	s, _, err = Parse([]byte("(4:test3:foo(baz))"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("testing"))
+	s, _, err = Parse([]byte("testing"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("\"testing-foo bar\""))
+	s, _, err = Parse([]byte("\"testing-foo bar\""))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("(\"testing-foo bar\")"))
+	s, _, err = Parse([]byte("(\"testing-foo bar\")"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("(testing-foo\" bar\")"))
+	s, _, err = Parse([]byte("(testing-foo\" bar\")"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(string(s.Pack()))
-	s, _, err = ReadBytes([]byte("([foo/bar]#7a # [\"quux beam\"]bar ([jim]|Zm9vYmFy YmF6|)\"foo bar\\r\"{Zm9vYmFyYmF6})"))
+	s, _, err = Parse([]byte("([foo/bar]#7a # [\"quux beam\"]bar ([jim]|Zm9vYmFy YmF6|)\"foo bar\\r\"{Zm9vYmFyYmF6})"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if s == nil {
+		t.Fatal("Not parsed")
 	}
 	t.Log(string(s.Pack()))
 	t.Log(s.String())
 }
 
 func TestTransport(t *testing.T) {
-	s1, _, err := ReadBytes([]byte("{KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}"))
+	s1, _, err := Parse([]byte("{KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	s2, _, err := ReadBytes([]byte("(3:foo3:bar[3:bin]8:baz quux)"))
+	if s1 == nil {
+		t.Fatal("List is nil")
+	}
+	s2, _, err := Parse([]byte("(3:foo3:bar[3:bin]8:baz quux)"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if s2 == nil {
+		t.Fatal("List is nil")
 	}
 	if !s1.Equal(s2) {
 		t.Fatal("Transport and non-transport-loaded S-expressions are not equal")
@@ -101,14 +111,14 @@ func TestTransport(t *testing.T) {
 }
 
 func TestIsList(t *testing.T) {
-	s, _, err := ReadBytes([]byte("(abc efg-hijk )"))
+	s, _, err := Parse([]byte("(abc efg-hijk )"))
 	if err != nil {
 		t.Fatal("Could not parse list", err)
 	}
 	if !IsList(s) {
 		t.Fatal("List considered not-List")
 	}
-	s, _, err = ReadBytes([]byte("abc"))
+	s, _, err = Parse([]byte("abc"))
 	if err != nil {
 		t.Fatal("Could not parse atom", err)
 	}
@@ -130,7 +140,7 @@ func TestRead(t *testing.T) {
 		t.Fatal("Zero-length list expected")
 	}
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("6:foobar"))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok := s.(Atom)
@@ -143,7 +153,7 @@ func TestRead(t *testing.T) {
 		t.Fatal("Didn't fail on invalid bytestring")
 	}
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("3#61 6 263#"))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok = s.(Atom)
@@ -154,7 +164,7 @@ func TestRead(t *testing.T) {
 		t.Fatal("Bad ", a)
 	}
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("3|Y2\r\nJ h|"))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok = s.(Atom)
@@ -167,7 +177,7 @@ func TestRead(t *testing.T) {
 	//t.Log(">>", string(a.Value))
 	// hex without length
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("#616263#"))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok = s.(Atom)
@@ -179,7 +189,7 @@ func TestRead(t *testing.T) {
 	}
 	// base64 without length
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("|Y2Jh|"))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok = s.(Atom)
@@ -191,7 +201,7 @@ func TestRead(t *testing.T) {
 	}
 	// quoted string without length
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("\"Foo bar \rbaz quux\\\nquuux\""))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok = s.(Atom)
@@ -203,7 +213,7 @@ func TestRead(t *testing.T) {
 	}
 	// escaped return
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("\"Foo bar \\\r\""))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	a, ok = s.(Atom)
@@ -215,7 +225,7 @@ func TestRead(t *testing.T) {
 	}
 	// list
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("(a b)"))))
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
 	l, ok = s.(List)
@@ -224,5 +234,13 @@ func TestRead(t *testing.T) {
 	}
 	if !l.Equal(List{Atom{Value: []byte("a")}, Atom{Value: []byte("b")}}) {
 		t.Fatal("Bad ", l)
+	}
+	// display hint
+	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("[abc]bar"))))
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if !s.Equal(Atom{DisplayHint: []byte("abc"), Value: []byte("bar")}) {
+		t.Fatal("Bad s-expression", s)
 	}
 }

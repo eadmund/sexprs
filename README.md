@@ -148,8 +148,14 @@ type Sexp interface {
 
 Sexp is the interface implemented by both lists and atoms.
 
-#### func  ReadBytes
+#### func  Parse
 
 ```go
-func ReadBytes(bytes []byte) (sexpr Sexp, rest []byte, err error)
+func Parse(s []byte) (sexpr Sexp, rest []byte, err error)
+```
+
+#### func  Read
+
+```go
+func Read(r *bufio.Reader) (s Sexp, err error)
 ```

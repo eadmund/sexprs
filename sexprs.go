@@ -36,11 +36,13 @@
 package sexprs
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"bufio"
+	"io"
+	"io/ioutil"
 	"strconv"
 )
 
@@ -287,258 +289,15 @@ func (l List) PackedLen() (size int) {
 	return size
 }
 
-func ReadBytes(bytes []byte) (sexpr Sexp, rest []byte, err error) {
-	return parseSexp(bytes)
-
-}
-
-func parseSexp(s []byte) (sexpr Sexp, rest []byte, err error) {
-	first, rest := s[0], s[1:]
-	switch {
-	case first == byte('('):
-		return parseList(rest)
-	case first == byte('{'):
-		return parseTransport(rest)
-	case bytes.IndexByte(stringChar, first) > -1, first == byte('['):
-		return parseAtom(s)
-	default:
-		return nil, rest, fmt.Errorf("Unrecognised character at start of s-expression: %c", first)
-	}
-
-	panic("Should never get here")
-}
-
-func parseList(s []byte) (l List, rest []byte, err error) {
-	acc := make(List, 0)
-	var sexpr Sexp
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c == byte(')'):
-			return acc, s[i+1:], nil
-		case bytes.IndexByte(whitespaceChar, c) == -1:
-			sexpr, s, err = parseSexp(s[i:])
-			if err != nil {
-				return nil, nil, err
-			}
-			i = -1
-			acc = append(acc, sexpr)
-		}
-	}
-	return nil, nil, fmt.Errorf("Expected ')' to terminate list")
-}
-
-func parseAtom(s []byte) (a Atom, rest []byte, err error) {
-	first, rest := s[0], s[1:]
-	var displayHint, value []byte
-	if first == byte('[') {
-		displayHint, s, err = parseSimpleString(rest)
-		if err != nil {
-			return Atom{}, rest, err
-		}
-		s = s[1:]
-	}
-	value, rest, err = parseSimpleString(s)
-	if err != nil {
-		return Atom{}, nil, err
-	}
-	return Atom{DisplayHint: displayHint, Value: value}, rest, nil
-}
-
-func parseSimpleString(s []byte) (str, rest []byte, err error) {
-	length := -1
-	if bytes.IndexByte(decimalDigit, s[0]) > -1 {
-		var lengthString []byte
-		lengthString, s, err = parseDecimal(s)
-		if err != nil {
-			return nil, nil, err
-		}
-		length, err = strconv.Atoi(string(lengthString))
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	switch s[0] {
-	case byte(':'):
-		if length < 0 {
-			return nil, nil, fmt.Errorf("Unspecified length of raw string")
-		}
-		return s[1 : length+1], s[length+1:], nil
-	case byte('#'):
-		str, rest, err = parseHexadecimal(s[1:])
-	case byte('|'):
-		str, rest, err = parseBase64(s[1:])
-	case byte('"'):
-		str, rest, err = parseQuotedString(s[1:], length)
-	default:
-		if bytes.IndexByte(tokenChar, s[0]) > -1 {
-			var i int
-			for i = 1; i < len(s) && bytes.IndexByte(tokenChar, s[i]) > -1; i++ {
-			}
-			str = s[0:i]
-			return str, s[i:], nil
-		}
-		return nil, nil, fmt.Errorf("Unknown char %c parsing simple string", s[0])
-	}
-	if err != nil {
+func Parse(s []byte) (sexpr Sexp, rest []byte, err error) {
+	//return parseSexp(bytes)
+	r := bufio.NewReader(bytes.NewReader(s))
+	sexpr, err = Read(r)
+	if err != nil && err != io.EOF {
 		return nil, nil, err
 	}
-	if length != -1 {
-		if len(str) != length {
-			return nil, nil, fmt.Errorf("Explicit length %d not equal to implicit length %d", length, len(str))
-		}
-		return str, s[length:], nil
-	}
-	return str, rest, nil
-}
-
-func parseDecimal(s []byte) (decimal, rest []byte, err error) {
-	for i := range s {
-		if bytes.IndexByte(decimalDigit, s[i]) < 0 {
-			return s[0:i], s[i:], nil
-		}
-	}
-	return s, rest, nil
-}
-
-func parseHexadecimal(s []byte) (str, rest []byte, err error) {
-	acc := make([]byte, 0, 2) // minimum hex string length
-	for i := range s {
-		c := s[i]
-		switch {
-		case bytes.IndexByte(whitespaceChar, c) >= 0:
-			continue
-		case bytes.IndexByte(hexadecimalDigit, c) < 0:
-			if c != byte('#') {
-				return nil, nil, fmt.Errorf("Expected # to terminate hexadecimal string; found %c", s[i])
-			}
-			str := make([]byte, hex.DecodedLen(i))
-			length, err := hex.Decode(str, acc)
-			if err != nil {
-				return nil, nil, err
-			}
-			return str[:length], s[i+1:], nil
-		default:
-			acc = append(acc, c)
-		}
-	}
-	return nil, nil, fmt.Errorf("Unexpected end of hexadecimal value")
-}
-
-func parseBase64(s []byte) (b, rest []byte, err error) {
-	acc := make([]byte, 0, 4) // minimum base64 string length
-	for i := range s {
-		c := s[i]
-		switch {
-		case bytes.IndexByte(whitespaceChar, c) >= 0:
-			continue
-		case bytes.IndexByte(base64Char, c) < 0:
-			if c != byte('|') {
-				return nil, nil, fmt.Errorf("Expected | to terminate Base64 string; found %c", c)
-			}
-			b = make([]byte, base64Encoding.DecodedLen(len(acc)))
-			length, err := base64Encoding.Decode(b, acc)
-			if err != nil {
-				return nil, nil, err
-			}
-			return b[:length], s[i+1:], nil
-		default:
-			acc = append(acc, s[i])
-		}
-	}
-	return nil, nil, fmt.Errorf("Unexpected end of Base64 value")
-}
-
-func parseQuotedString(s []byte, length int) (decimal, rest []byte, err error) {
-	var acc []byte
-	if length > 0 {
-		acc = make([]byte, length)
-	} else {
-		acc = make([]byte, 0)
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch c {
-		case byte('"'):
-			if length != -1 && len(acc) != length {
-				return nil, nil, fmt.Errorf("Explicit length %d not equal to implicit length %d", length, len(acc))
-			}
-			return acc, s[i+1:], nil
-		case '\\':
-			i++
-			if i == len(s) {
-				return nil, nil, fmt.Errorf("Unterminated quoted string")
-			}
-			c = s[i]
-			switch c {
-			case byte('b'):
-				c = byte('\b')
-			case byte('t'):
-				c = byte('\t')
-			case byte('v'):
-				c = byte('\v')
-			case byte('n'):
-				c = byte('\n')
-			case byte('f'):
-				c = byte('\f')
-			case byte('r'):
-				c = byte('\r')
-			case byte('"'):
-				c = byte('"')
-			case byte('\''):
-				c = byte('\'')
-			case byte('\\'):
-				c = byte('\\')
-			case byte('\n'):
-				if i+1 < len(s) && s[i+1] == byte('\r') {
-					i++
-				}
-				continue
-			case byte('\r'):
-				if i+1 < len(s) && s[i+1] == byte('\n') {
-					i++
-				}
-				continue
-			case byte('x'):
-				num, err := strconv.ParseInt(string(s[i+1:i+2]), 16, 8)
-				if err != nil {
-					return nil, nil, err
-				}
-				c = byte(num)
-			default:
-				if bytes.IndexByte(octalDigit, c) > -1 && bytes.IndexByte(octalDigit, s[i+1]) > -1 && bytes.IndexByte(octalDigit, s[i+2]) > -1 {
-					num, err := strconv.ParseInt(string(s[i:i+2]), 8, 8)
-					if err != nil {
-						return nil, nil, err
-					}
-					c = byte(num)
-				}
-				return nil, nil, fmt.Errorf("Unrecognised escape character %c", rune(c))
-			}
-			fallthrough
-		default:
-			acc = append(acc, c)
-		}
-	}
-	return nil, nil, fmt.Errorf("Unexpected end of quoted string")
-}
-
-func parseTransport(s []byte) (sexp Sexp, rest []byte, err error) {
-	for i := range s {
-		if s[i] == byte('}') {
-			decoded := make([]byte, base64Encoding.DecodedLen(i))
-			length, err := base64Encoding.Decode(decoded, s[0:i])
-			if err != nil {
-				return nil, nil, err
-			}
-			sexp, rest, err = parseSexp(decoded[:length])
-			if len(rest) != 0 {
-				return nil, nil, fmt.Errorf("Expected complete single transport-encoded S-expression")
-			}
-			return sexp, s[i+1:], err
-		}
-	}
-	return nil, nil, fmt.Errorf("Expected '}' to terminate transport representation")
+	rest, err = ioutil.ReadAll(r)
+	return sexpr, rest, err
 }
 
 func IsList(s Sexp) bool {
@@ -553,7 +312,24 @@ func Read(r *bufio.Reader) (s Sexp, err error) {
 	}
 	switch c {
 	case '{':
-		// FIXME: decode transport encoding
+		enc, err := r.ReadBytes('}')
+		acc := make([]byte, 0, len(enc)-1)
+		for _, c := range enc[:len(enc)-1] {
+			if bytes.IndexByte(whitespaceChar, c) == -1 {
+				acc = append(acc, c)
+			}
+		}
+		str := make([]byte, base64.StdEncoding.DecodedLen(len(acc)))
+		n, err := base64.StdEncoding.Decode(str, acc)
+		if err != nil {
+			return nil, err
+		}
+		s, err = Read(bufio.NewReader(bytes.NewReader(str[:n])))
+		if err == nil || err == io.EOF {
+			return s, nil
+		} else {
+			return nil, err
+		}
 	case '(':
 		l := List{}
 		// skip whitespace
@@ -568,7 +344,6 @@ func Read(r *bufio.Reader) (s Sexp, err error) {
 				if err != nil {
 					return nil, err
 				}
-				fmt.Println(">>", element)
 				l = append(l, element)
 			}
 			if err != nil {
@@ -584,7 +359,6 @@ func Read(r *bufio.Reader) (s Sexp, err error) {
 	panic("Can't reach here")
 }
 
-
 func readString(r *bufio.Reader, first byte) (s Sexp, err error) {
 	var displayHint []byte
 	if first == '[' {
@@ -593,6 +367,9 @@ func readString(r *bufio.Reader, first byte) (s Sexp, err error) {
 			return nil, err
 		}
 		displayHint, err = readSimpleString(r, c)
+		if err != nil {
+			return nil, err
+		}
 		c, err = r.ReadByte()
 		if err != nil {
 			return nil, err
@@ -611,13 +388,13 @@ func readSimpleString(r *bufio.Reader, first byte) (s []byte, err error) {
 	case bytes.IndexByte(decimalDigit, first) > -1:
 		return readLengthDelimited(r, first)
 	case first == '#':
-		s, err := readHex(r, -1)
+		s, err := readHex(r)
 		if err != nil {
 			return nil, err
 		}
 		return s, nil
 	case first == '|':
-		s, err := readBase64(r, -1)
+		s, err := readBase64(r)
 		if err != nil {
 			return nil, err
 		}
@@ -629,11 +406,9 @@ func readSimpleString(r *bufio.Reader, first byte) (s []byte, err error) {
 		}
 		return s, nil
 	case bytes.IndexByte(tokenChar, first) > -1:
-		fmt.Println("token")
 		s = append(s, first)
 		for {
 			c, err := r.ReadByte()
-			fmt.Printf("> %c %v\n", c, err)
 			if bytes.IndexByte(tokenChar, c) == -1 {
 				r.UnreadByte()
 				return s, err
@@ -644,20 +419,17 @@ func readSimpleString(r *bufio.Reader, first byte) (s []byte, err error) {
 			}
 		}
 	}
-	fmt.Printf("> %c\n", first)
 	panic("can't get here")
 }
 
 func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 	acc := make([]byte, 1)
 	acc[0] = first
-	buf := make([]byte, 1)
 	for {
-		_, err := r.Read(buf)
+		c, err := r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		c := buf[0]
 		switch {
 		case bytes.IndexByte(decimalDigit, c) > -1:
 			acc = append(acc, c)
@@ -666,26 +438,22 @@ func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 			if err != nil {
 				return nil, err
 			}
-			buf = make([]byte, length)
-			n, err := r.Read(buf)
-			if int64(n) == length {
-				return buf, nil
-			} else {
+			acc = make([]byte, 0, length)
+			buf := make([]byte, length)
+			for n, err := r.Read(buf); int64(len(acc)) < length; n, err = r.Read(buf[:length-int64(len(acc))]) {
+				acc = append(acc, buf[:n]...)
 				if err != nil {
-					return nil, err
-				} else {
-					return nil, fmt.Errorf("Could not read %d bytes", length)
+					return acc, err
 				}
 			}
+			return acc, nil
 		case c == '#':
 			length, err := strconv.ParseInt(string(acc), 10, 32)
 			if err != nil {
 				return nil, err
 			}
-			s, err := readHex(r, hex.EncodedLen(int(length)))
+			s, err := readHex(r)
 			switch {
-			case err != nil:
-				return nil, err
 			case len(s) != int(length):
 				return nil, fmt.Errorf("Expected %d bytes; got %d", length, len(s))
 			default:
@@ -696,10 +464,8 @@ func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 			if err != nil {
 				return nil, err
 			}
-			s, err := readBase64(r, -1)
+			s, err := readBase64(r)
 			switch {
-			case err != nil:
-				return nil, err
 			case len(s) != int(length):
 				return nil, fmt.Errorf("Expected %d bytes; got %d", length, len(s))
 			default:
@@ -712,62 +478,30 @@ func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 	panic("Can't get here")
 }
 
-func readHex(r *bufio.Reader, length int) (s []byte, err error) {
-	var acc, buf []byte
-	if length >= 0 {
-		acc = make([]byte, 0, hex.EncodedLen(length))
-		buf = make([]byte, hex.EncodedLen(length))
-	} else {
-		acc = make([]byte, 0)
-		buf = make([]byte, 1)
-	}
-	for n, err := r.Read(buf); n > 0 || err == nil; n, err = r.Read(buf) {
-		for _, c := range buf {
-			switch {
-			case bytes.IndexByte(hexadecimalDigit, c) > -1:
-				acc = append(acc, c)
-			case bytes.IndexByte(whitespaceChar, c) > -1:
-				continue
-			case c == '#':
-				s := make([]byte, hex.DecodedLen(len(acc)))
-				_, err := hex.Decode(s, acc)
-				return s, err
-			default:
-				return nil, fmt.Errorf("Unexpected character %c", c)
-			}
+func readHex(r *bufio.Reader) (s []byte, err error) {
+	raw, err := r.ReadBytes('#')
+	acc := make([]byte, 0, len(raw)-1)
+	for _, c := range raw[:len(raw)-1] {
+		if bytes.IndexByte(whitespaceChar, c) == -1 {
+			acc = append(acc, c)
 		}
-		buf = buf[0:1] // reduce buffer length to 1
 	}
-	return acc, nil
+	s = make([]byte, hex.DecodedLen(len(acc)))
+	n, err := hex.Decode(s, acc)
+	return s[:n], err
 }
 
-func readBase64(r *bufio.Reader, length int) (s []byte, err error) {
-	var acc, buf []byte
-	if length >= 0 {
-		acc = make([]byte, 0, base64.StdEncoding.EncodedLen(length))
-		buf = make([]byte, length)
-	} else {
-		acc = make([]byte, 0)
-		buf = make([]byte, 1)
-	}
-	for n, err := r.Read(buf); n > 0 || err == nil; n, err = r.Read(buf) {
-		for _, c := range buf {
-			switch {
-			case bytes.IndexByte(base64Char, c) > -1:
-				acc = append(acc, c)
-			case bytes.IndexByte(whitespaceChar, c) > -1:
-				continue
-			case c == '|':
-				s := make([]byte, base64.StdEncoding.DecodedLen(len(acc)))
-				_, err := base64.StdEncoding.Decode(s, acc)
-				return s, err
-			default:
-				return nil, fmt.Errorf("Unexpected character %c", c)
-			}
+func readBase64(r *bufio.Reader) (s []byte, err error) {
+	raw, err := r.ReadBytes('|')
+	acc := make([]byte, 0, len(raw)-1)
+	for _, c := range raw[:len(raw)-1] {
+		if bytes.IndexByte(whitespaceChar, c) == -1 {
+			acc = append(acc, c)
 		}
-		buf = buf[0:1] // reduce buffer length to 1
 	}
-	return acc, nil
+	s = make([]byte, base64.StdEncoding.DecodedLen(len(acc)))
+	n, err := base64.StdEncoding.Decode(s, acc)
+	return s[:n], err
 }
 
 type quoteState int
@@ -785,134 +519,137 @@ const (
 )
 
 func readQuotedString(r *bufio.Reader, length int) (s []byte, err error) {
-	var acc, buf, escape []byte
+	var acc, escape []byte
 	if length >= 0 {
 		acc = make([]byte, 0, length)
-		buf = make([]byte, 0, length)
 	} else {
 		acc = make([]byte, 0)
-		buf = make([]byte, 1)
 	}
 	escape = make([]byte, 3)
 	state := inQuote
-	for n, err := r.Read(buf); n > 0 || err == nil; n, err = r.Read(buf) {
-		for _, c := range buf {
-			switch state {
-			case inQuote:
-				switch c {
-				case '"':
-					if length > 0 && len(acc) != length {
-						return nil, fmt.Errorf("Length mismatch")
-					}
-					return acc, err
-				case '\\':
-					state = inEscape
-				default:
-					acc = append(acc, c)
+	for c, err := r.ReadByte(); err == nil; c, err = r.ReadByte() {
+		switch state {
+		case inQuote:
+			switch c {
+			case '"':
+				if length > 0 && len(acc) != length {
+					return nil, fmt.Errorf("Length mismatch")
 				}
-			case inEscape:
-				fmt.Printf("c %c\n", c)
-				switch c {
-				case byte('b'):
-					acc = append(acc, '\b')
-				case byte('t'):
-					acc = append(acc, '\t')
-				case byte('v'):
-					acc = append(acc, '\v')
-				case byte('n'):
-					acc = append(acc, '\n')
-				case byte('f'):
-					acc = append(acc, '\f')
-				case byte('r'):
-					acc = append(acc, '\r')
-				case byte('"'):
-					acc = append(acc, '"')
-				case byte('\''):
-					acc = append(acc, '\'')
-				case byte('\\'):
-					acc = append(acc, '\\')
-				case byte('\n'):
-					state = inNewlineEscape
-				case '\r':
-					state = inReturnEscape
-				case byte('x'):
-					state = inHex1
-				default:
-					if bytes.IndexByte(octalDigit, c) > -1 {
-						state = inOctal2
-						escape[0] = c
-					} else {
-						return nil, fmt.Errorf("Unrecognised escape character %c", rune(c))
-					}
-				}
-			case inNewlineEscape:
-				switch c {
-				case '\r':
-					// pass
-				case '"':
-					if length > 0 && len(acc) != length {
-						return nil, fmt.Errorf("Length mismatch")
-					}
-					return acc, nil
-				default:
-					acc = append(acc, c)
-				}
+				return acc, err
+			case '\\':
+				state = inEscape
+			default:
+				acc = append(acc, c)
+			}
+		case inEscape:
+			switch c {
+			case byte('b'):
+				acc = append(acc, '\b')
 				state = inQuote
-			case inReturnEscape:
-				switch c {
-				case '\n':
-					// pass
-				case '"':
-					if length > 0 && len(acc) != length {
-						return nil, fmt.Errorf("Length mismatch")
-					}
-					return acc, nil
-				default:
-					acc = append(acc, c)
-				}
+			case byte('t'):
+				acc = append(acc, '\t')
 				state = inQuote
-			case inHex1:
-				if bytes.IndexByte(hexadecimalDigit, c) > -1 {
-					state = inHex2
+			case byte('v'):
+				acc = append(acc, '\v')
+				state = inQuote
+			case byte('n'):
+				acc = append(acc, '\n')
+				state = inQuote
+			case byte('f'):
+				acc = append(acc, '\f')
+				state = inQuote
+			case byte('r'):
+				acc = append(acc, '\r')
+				state = inQuote
+			case byte('"'):
+				acc = append(acc, '"')
+				state = inQuote
+			case byte('\''):
+				acc = append(acc, '\'')
+				state = inQuote
+			case byte('\\'):
+				acc = append(acc, '\\')
+				state = inQuote
+			case byte('\n'):
+				state = inNewlineEscape
+			case '\r':
+				state = inReturnEscape
+			case byte('x'):
+				state = inHex1
+			default:
+				if bytes.IndexByte(octalDigit, c) > -1 {
+					state = inOctal2
 					escape[0] = c
 				} else {
-					return nil, fmt.Errorf("Expected hexadecimal digit; got %c", c)
+					return nil, fmt.Errorf("Unrecognised escape character %c", rune(c))
 				}
-			case inHex2:
-				if bytes.IndexByte(hexadecimalDigit, c) > -1 {
-					state = inQuote
-					escape[2] = c
-					num, err := strconv.ParseInt(string(escape[:2]), 16, 8)
-					if err != nil {
-						return nil, err
-					}
-					acc = append(acc, byte(num))
-				} else {
-					return nil, fmt.Errorf("Expected hexadecimal digit; got %c", c)
+				state = inQuote
+			}
+		case inNewlineEscape:
+			switch c {
+			case '\r':
+				// pass
+			case '"':
+				if length > 0 && len(acc) != length {
+					return nil, fmt.Errorf("Length mismatch")
 				}
-			case inOctal2:
-				if bytes.IndexByte(octalDigit, c) > -1 {
-					state = inOctal3
-					escape[1] = c
-				} else {
-					return nil, fmt.Errorf("Expected octal digit; got %c", c)
+				return acc, nil
+			default:
+				acc = append(acc, c)
+			}
+			state = inQuote
+		case inReturnEscape:
+			switch c {
+			case '\n':
+				// pass
+			case '"':
+				if length > 0 && len(acc) != length {
+					return nil, fmt.Errorf("Length mismatch")
 				}
-			case inOctal3:
-				if bytes.IndexByte(octalDigit, c) > -1 {
-					state = inQuote
-					escape[2] = c
-					num, err := strconv.ParseInt(string(escape[:2]), 8, 8)
-					if err != nil {
-						return nil, err
-					}
-					acc = append(acc, byte(num))
-				} else {
-					return nil, fmt.Errorf("Expected octal digit; got %c", c)
+				return acc, nil
+			default:
+				acc = append(acc, c)
+			}
+			state = inQuote
+		case inHex1:
+			if bytes.IndexByte(hexadecimalDigit, c) > -1 {
+				state = inHex2
+				escape[0] = c
+			} else {
+				return nil, fmt.Errorf("Expected hexadecimal digit; got %c", c)
+			}
+		case inHex2:
+			if bytes.IndexByte(hexadecimalDigit, c) > -1 {
+				state = inQuote
+				escape[2] = c
+				num, err := strconv.ParseInt(string(escape[:2]), 16, 8)
+				if err != nil {
+					return nil, err
 				}
+				acc = append(acc, byte(num))
+			} else {
+				return nil, fmt.Errorf("Expected hexadecimal digit; got %c", c)
+			}
+		case inOctal2:
+			if bytes.IndexByte(octalDigit, c) > -1 {
+				state = inOctal3
+				escape[1] = c
+			} else {
+				return nil, fmt.Errorf("Expected octal digit; got %c", c)
+			}
+		case inOctal3:
+			if bytes.IndexByte(octalDigit, c) > -1 {
+				state = inQuote
+				escape[2] = c
+				num, err := strconv.ParseInt(string(escape[:2]), 8, 8)
+				if err != nil {
+					return nil, err
+				}
+				acc = append(acc, byte(num))
+			} else {
+				return nil, fmt.Errorf("Expected octal digit; got %c", c)
 			}
 		}
-
-		buf = buf[0:1] // reduce buffer length to 1
 	}
 	return nil, fmt.Errorf("Unterminated string")
 }
