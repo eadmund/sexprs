@@ -3,10 +3,11 @@
     import "github.com/eadmund/sexprs"
 
 Package sexprs implements Ron Rivest's canonical S-expressions
-<URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.  I'm
-indebted to Inferno's sexprs(2), whose API I first accidentally,
-and then deliberately, mimicked.  I've copied much of its style,
-only making it more Go-like.
+(c.f. http://people.csail.mit.edu/rivest/Sexp.txt or
+rivest-draft.txt in this package) in Go.  I'm indebted to Inferno's
+sexprs(2), whose API I first accidentally, and then deliberately,
+mimicked.  I've copied much of its style, only making it more
+Go-like.
 
 Canonical S-expressions are a compact, easy-to-parse, ordered,
 hashable data representation ideal for cryptographic operations.
@@ -153,9 +154,14 @@ Sexp is the interface implemented by both lists and atoms.
 ```go
 func Parse(s []byte) (sexpr Sexp, rest []byte, err error)
 ```
+Parse returns the first S-expression in byte string s, the unparsed rest of s
+and any error encountered
 
 #### func  Read
 
 ```go
 func Read(r *bufio.Reader) (s Sexp, err error)
 ```
+Read a single S-expression from buffered IO r, returning any error encountered.
+May return io.EOF if at end of r; may return a valid S-expression and io.EOF if
+the EOF was encountered at the end of parsing.

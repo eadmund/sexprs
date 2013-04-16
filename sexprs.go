@@ -3,10 +3,11 @@
 // be found in the LICENSE file.
 
 // Package sexprs implements Ron Rivest's canonical S-expressions
-// <URL:http://people.csail.mit.edu/rivest/Sexp.txt> in Go.  I'm
-// indebted to Inferno's sexprs(2), whose API I first accidentally,
-// and then deliberately, mimicked.  I've copied much of its style,
-// only making it more Go-like.
+// (c.f. http://people.csail.mit.edu/rivest/Sexp.txt or
+// rivest-draft.txt in this package) in Go.  I'm indebted to Inferno's
+// sexprs(2), whose API I first accidentally, and then deliberately,
+// mimicked.  I've copied much of its style, only making it more
+// Go-like.
 //
 // Canonical S-expressions are a compact, easy-to-parse, ordered,
 // hashable data representation ideal for cryptographic operations.
@@ -289,6 +290,8 @@ func (l List) PackedLen() (size int) {
 	return size
 }
 
+// Parse returns the first S-expression in byte string s, the unparsed
+// rest of s and any error encountered
 func Parse(s []byte) (sexpr Sexp, rest []byte, err error) {
 	//return parseSexp(bytes)
 	r := bufio.NewReader(bytes.NewReader(s))
@@ -297,6 +300,10 @@ func Parse(s []byte) (sexpr Sexp, rest []byte, err error) {
 		return nil, nil, err
 	}
 	rest, err = ioutil.ReadAll(r)
+	// don't confuse calling code with EOFs
+	if err == io.EOF {
+		err = nil
+	}
 	return sexpr, rest, err
 }
 
@@ -305,6 +312,10 @@ func IsList(s Sexp) bool {
 	return ok
 }
 
+// Read a single S-expression from buffered IO r, returning any error
+// encountered.  May return io.EOF if at end of r; may return a valid
+// S-expression and io.EOF if the EOF was encountered at the end of
+// parsing.
 func Read(r *bufio.Reader) (s Sexp, err error) {
 	c, err := r.ReadByte()
 	if err != nil {
