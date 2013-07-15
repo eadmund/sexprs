@@ -45,6 +45,7 @@ import (
 	"io"
 	"io/ioutil"
 	"strconv"
+	"errors"
 )
 
 var (
@@ -430,7 +431,8 @@ func readSimpleString(r *bufio.Reader, first byte) (s []byte, err error) {
 			}
 		}
 	}
-	panic("can't get here")
+	err = errors.New("can't readSimpleString")
+	return
 }
 
 func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
