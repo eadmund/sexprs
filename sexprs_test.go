@@ -7,6 +7,7 @@ package sexprs
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"testing"
 )
@@ -243,4 +244,14 @@ func TestRead(t *testing.T) {
 	if !s.Equal(Atom{DisplayHint: []byte("abc"), Value: []byte("bar")}) {
 		t.Fatal("Bad s-expression", s)
 	}
+}
+
+func ExampleAtom_Pack() {
+	foo := Atom{Value: []byte("foo")}
+	fmt.Println(string(foo.Pack()))
+	bar := Atom{DisplayHint: []byte("text/plain"), Value: []byte("bar")}
+	fmt.Println(string(bar.Pack()))
+	// Output:
+	// 3:foo
+	// [10:text/plain]3:bar
 }

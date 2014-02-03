@@ -29,7 +29,7 @@
 //    (foo 3:bar [bin]"baz quux")
 // and:
 //    ("foo" #626172# [3:bin]|YmF6IHF1dXg=|)
-// 
+//
 // There is also a transport encoding (intended for use in 7-bit transport
 // modes), delimited with {}:
 //    {KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}
@@ -89,13 +89,28 @@ type Sexp interface {
 	Equal(b Sexp) bool
 }
 
+// A List is a slice of Lists and Atoms.
 type List []Sexp
 
+// An Atom is a byte sequence, together with an optional display hint,
+// also a byte sequence.  The display hint could potentially be used
+// to inform a user agent that a value should be interpreted as, e.g.,
+// a JPEG.  One might use MIME types as display hints,
+// e.g. [text/plain]"This is plain text" (although this particular
+// case is somewhat unlikely, since most user agents are likely to
+// default to plain text).  Note that there are no semantics attached
+// to the value; it could be a UTF-8 string, a little-endian integer,
+// a big-endian integer or any other byte sequence.
 type Atom struct {
 	DisplayHint []byte
 	Value       []byte
 }
 
+// Pack returns the canonical form of an Atom: a decimal indicating
+// its length in bytes, a colon, and then the bytes.  If there is a
+// display hint, it is prepended within square brackets.  E.g. "foo"
+// is packed as "3:foo" and "bar" with a display hint of "text/plain"
+// is packed as "[10:text/plain]3:bar".
 func (a Atom) Pack() []byte {
 	buf := bytes.NewBuffer(nil)
 	a.pack(buf)
@@ -228,6 +243,8 @@ func (a Atom) Equal(b Sexp) bool {
 	return false
 }
 
+// Pack returns each component of List l within parentheses,
+// e.g. "(foo)" would pack as "(3:foo)".
 func (l List) Pack() []byte {
 	buf := bytes.NewBuffer(nil)
 	l.pack(buf)
