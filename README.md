@@ -23,16 +23,16 @@ advanced representation is string-oriented and more traditional in
 appearance.
 
 The S-expression ("foo" "bar" ["bin"]"baz quux") is canonically:
-   (3:foo3:bar[3:bin]8:quux)
+    (3:foo3:bar[3:bin]8:quux)
 
 Among the valid advanced representations are:
-   (foo 3:bar [bin]"baz quux")
+    (foo 3:bar [bin]"baz quux")
 and:
-   ("foo" #626172# [3:bin]|YmF6IHF1dXg=|)
+    ("foo" #626172# [3:bin]|YmF6IHF1dXg=|)
 
 There is also a transport encoding (intended for use in 7-bit transport
 modes), delimited with {}:
-   {KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}
+    {KDM6Zm9vMzpiYXJbMzpiaW5dODpiYXogcXV1eCk=}
 
 ## Usage
 
