@@ -234,6 +234,9 @@ func (a Atom) Base64String() (s string) {
 }
 
 func (a Atom) Equal(b Sexp) bool {
+	if b == nil {
+		return false
+	}
 	switch b := b.(type) {
 	case Atom:
 		return bytes.Equal(a.DisplayHint, b.DisplayHint) && bytes.Equal(a.Value, b.Value)
@@ -281,6 +284,12 @@ func (l List) string(buf *bytes.Buffer) {
 }
 
 func (a List) Equal(b Sexp) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if b == nil {
+		return false
+	}
 	switch b := b.(type) {
 	case List:
 		if len(a) != len(b) {
