@@ -223,7 +223,7 @@ func (a Atom) string(buf *bytes.Buffer) {
 		buf.WriteString("]")
 	}
 	if len(a.Value) == 0 {
-		buf.WriteString("")
+		buf.WriteString("\"\"")
 	} else {
 		writeString(buf, a.Value)
 	}

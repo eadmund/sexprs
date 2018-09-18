@@ -263,3 +263,46 @@ func ExampleAtom_Pack() {
 	// 3:foo
 	// [10:text/plain]3:bar
 }
+
+func ExampleAtom_String() {
+	foo := Atom{Value: []byte("foo")}
+	fmt.Println(foo.String())
+	foo.Value = []byte("bar baz")
+	fmt.Println(foo.String())
+	foo.Value = []byte("bar\nbaz")
+	fmt.Println(foo.String())
+	foo.Value = []byte{0, 1, 2, 3}
+	fmt.Println(foo.String())
+	// Output:
+	// foo
+	// "bar baz"
+	// "bar\nbaz"
+	// |AAECAw==|
+}
+
+func ExampleList_Pack() {
+	list := List{Atom{Value: []byte("foo")}, List{Atom{Value: []byte("bar baz"), DisplayHint: []byte("text/plain")}, Atom{DisplayHint: []byte{'\n'}}}}
+	fmt.Println(string(list.Pack()))
+	readList, _, err := Parse([]byte(list.String()))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(readList.Equal(list))
+	// Output:
+	// (3:foo([10:text/plain]7:bar baz[1:
+	// ]0:))
+	// true
+}
+
+func ExampleList_String() {
+	list := List{Atom{Value: []byte("foo")}, List{Atom{Value: []byte("bar baz"), DisplayHint: []byte("text/plain")}, Atom{DisplayHint: []byte{1, 2, 3}}}}
+	fmt.Println(list.String())
+	readList, _, err := Parse([]byte(list.String()))
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(readList.Equal(list))
+	// Output:
+	// (foo ([text/plain]"bar baz" [|AQID|]""))
+	// true
+}
