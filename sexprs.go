@@ -69,7 +69,10 @@ type Sexp interface {
 	// String returns an advanced representation of the object, with
 	// no line breaks.
 	String() string
-	string(*bytes.Buffer)
+
+	// StringBuffer writes an advanced representation of the
+	// object to a buffer, with no line breaks.
+	StringBuffer(*bytes.Buffer)
 
 	// Base64String returns a transport-encoded rendering of the
 	// S-expression.
@@ -79,7 +82,11 @@ type Sexp interface {
 	// will always return the same sequence of bytes for the same
 	// object.
 	Pack() []byte
-	pack(*bytes.Buffer)
+
+	// PackBuffer writes the canonical representation of the
+	// object to a buffer.  It will always write the same sequence
+	// of bytes for the same object.
+	PackBuffer(*bytes.Buffer)
 
 	// PackedLen returns the size in bytes of the canonical
 	// representation.
@@ -114,11 +121,12 @@ type Atom struct {
 // is packed as "[10:text/plain]3:bar".
 func (a Atom) Pack() []byte {
 	buf := bytes.NewBuffer(nil)
-	a.pack(buf)
+	a.PackBuffer(buf)
 	return buf.Bytes()
 }
 
-func (a Atom) pack(buf *bytes.Buffer) {
+// PackBuffer implements Sexp.
+func (a Atom) PackBuffer(buf *bytes.Buffer) {
 	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
 		buf.WriteString("[" + strconv.Itoa(len(a.DisplayHint)) + ":")
 		buf.Write(a.DisplayHint)
@@ -142,7 +150,7 @@ func (a Atom) PackedLen() (size int) {
 
 func (a Atom) String() string {
 	buf := bytes.NewBuffer(nil)
-	a.string(buf)
+	a.StringBuffer(buf)
 	return buf.String()
 }
 
@@ -216,7 +224,8 @@ func writeString(buf *bytes.Buffer, a []byte) {
 
 }
 
-func (a Atom) string(buf *bytes.Buffer) {
+// StringBuffer implement Sexp.
+func (a Atom) StringBuffer(buf *bytes.Buffer) {
 	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
 		buf.WriteString("[")
 		writeString(buf, a.DisplayHint)
@@ -251,14 +260,14 @@ func (a Atom) Equal(b Sexp) bool {
 // e.g. "(foo)" would pack as "(3:foo)".
 func (l List) Pack() []byte {
 	buf := bytes.NewBuffer(nil)
-	l.pack(buf)
+	l.PackBuffer(buf)
 	return buf.Bytes()
 }
 
-func (l List) pack(buf *bytes.Buffer) {
+func (l List) PackBuffer(buf *bytes.Buffer) {
 	buf.WriteString("(")
 	for _, datum := range l {
-		datum.pack(buf)
+		datum.PackBuffer(buf)
 	}
 	buf.WriteString(")")
 }
@@ -270,14 +279,14 @@ func (l List) Base64String() string {
 
 func (l List) String() string {
 	buf := bytes.NewBuffer(nil)
-	l.string(buf)
+	l.StringBuffer(buf)
 	return buf.String()
 }
 
-func (l List) string(buf *bytes.Buffer) {
+func (l List) StringBuffer(buf *bytes.Buffer) {
 	buf.WriteString("(")
 	for i, datum := range l {
-		datum.string(buf)
+		datum.StringBuffer(buf)
 		if i < len(l)-1 {
 			buf.WriteString(" ")
 		}

@@ -161,6 +161,13 @@ func TestRead(t *testing.T) {
 	if err == nil {
 		t.Fatal("Didn't fail on invalid bytestring")
 	}
+	a, ok = s.(Atom)
+	if !ok {
+		t.Fatal("Atom expected")
+	}
+	if !bytes.Equal(a.Value, []byte("foobar")) {
+		t.Fatal("bad ", a)
+	}
 	s, err = Read(bufio.NewReader(bytes.NewReader([]byte("3#61 6 263#"))))
 	if err != nil && err != io.EOF {
 		t.Fatal(err)
