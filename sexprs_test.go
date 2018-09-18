@@ -45,15 +45,12 @@ func TestParseEmptyList(t *testing.T) {
 	t.Log(string(l.Pack()))
 }
 
-
 func TestError(t *testing.T) {
-	confirmError := func(a string) {
-		_, _, err := Parse([]byte(a))
-		if err == nil {
-			t.Fatalf("Parsing %v should have produced an error", a)
-		}
+	s := "((a)"
+	_, _, err := Parse([]byte(s))
+	if err == nil {
+		t.Fatalf("Parsing %v should have produced an error", s)
 	}
-	confirmError("((a)")
 }
 
 func TestParse(t *testing.T) {

@@ -41,11 +41,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"strconv"
-	"errors"
 )
 
 var (
@@ -514,7 +514,6 @@ func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 			return nil, fmt.Errorf("Expected integer; found %c", c)
 		}
 	}
-	panic("Can't get here")
 }
 
 func readHex(r *bufio.Reader) (s []byte, err error) {
