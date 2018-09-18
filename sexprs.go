@@ -41,11 +41,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"strconv"
+
+	"github.com/pkg/errors"
 )
 
 var (
@@ -57,7 +58,6 @@ var (
 	octalDigit       = []byte("01234567")
 	simplePunc       = []byte("-./_:*+=")
 	whitespaceChar   = []byte(" \t\r\n")
-	base64Char       = append(alpha, append(decimalDigit, []byte("+/=")...)...)
 	tokenChar        = append(alpha, append(decimalDigit, simplePunc...)...)
 	base64Encoding   = base64.StdEncoding
 	stringChar       = append(tokenChar, append(hexadecimalDigit, []byte("\"|#")...)...)
@@ -72,7 +72,7 @@ type Sexp interface {
 	string(*bytes.Buffer)
 
 	// Base64String returns a transport-encoded rendering of the
-	// S-expression
+	// S-expression.
 	Base64String() string
 
 	// Pack returns the canonical representation of the object.  It
@@ -128,6 +128,7 @@ func (a Atom) pack(buf *bytes.Buffer) {
 	buf.Write(a.Value)
 }
 
+// PackedLen Implements Sexp.
 func (a Atom) PackedLen() (size int) {
 	if a.DisplayHint != nil && len(a.DisplayHint) > 0 {
 		size += 3                                     // [:]
@@ -155,7 +156,7 @@ const (
 func writeString(buf *bytes.Buffer, a []byte) {
 	// test to see what sort of encoding is best to use
 	encoding := tokenEnc
-	acc := make([]byte, len(a), len(a))
+	acc := make([]byte, len(a))
 	for i, c := range a {
 		acc[i] = c
 		switch {
@@ -202,7 +203,6 @@ func writeString(buf *bytes.Buffer, a []byte) {
 			}
 		default:
 			encoding = base64Enc
-			break
 		}
 	}
 	switch encoding {
@@ -227,13 +227,14 @@ func (a Atom) string(buf *bytes.Buffer) {
 	} else {
 		writeString(buf, a.Value)
 	}
-	return
 }
 
+// Base64String implements Sexp.
 func (a Atom) Base64String() (s string) {
 	return "{" + base64Encoding.EncodeToString(a.Pack()) + "}"
 }
 
+// Equal implements Sexp.
 func (a Atom) Equal(b Sexp) bool {
 	if b == nil {
 		return false
@@ -244,7 +245,6 @@ func (a Atom) Equal(b Sexp) bool {
 	default:
 		return false
 	}
-	return false
 }
 
 // Pack returns each component of List l within parentheses,
@@ -263,6 +263,7 @@ func (l List) pack(buf *bytes.Buffer) {
 	buf.WriteString(")")
 }
 
+// Base64String implements Sexp.
 func (l List) Base64String() string {
 	return "{" + base64Encoding.EncodeToString(l.Pack()) + "}"
 }
@@ -284,8 +285,9 @@ func (l List) string(buf *bytes.Buffer) {
 	buf.WriteString(")")
 }
 
-func (a List) Equal(b Sexp) bool {
-	if a == nil && b == nil {
+// Equal implements Sexp.
+func (l List) Equal(b Sexp) bool {
+	if l == nil && b == nil {
 		return true
 	}
 	if b == nil {
@@ -293,22 +295,21 @@ func (a List) Equal(b Sexp) bool {
 	}
 	switch b := b.(type) {
 	case List:
-		if len(a) != len(b) {
+		if len(l) != len(b) {
 			return false
-		} else {
-			for i := range a {
-				if !a[i].Equal(b[i]) {
-					return false
-				}
-			}
-			return true
 		}
+		for i := range l {
+			if !l[i].Equal(b[i]) {
+				return false
+			}
+		}
+		return true
 	default:
 		return false
 	}
-	return false
 }
 
+// PackedLen implements Sexp.
 func (l List) PackedLen() (size int) {
 	size = 2 // ()
 	for _, element := range l {
@@ -334,6 +335,7 @@ func Parse(s []byte) (sexpr Sexp, rest []byte, err error) {
 	return sexpr, rest, err
 }
 
+// IsList returns true if its argument is a List.
 func IsList(s Sexp) bool {
 	s, ok := s.(List)
 	return ok
@@ -350,7 +352,13 @@ func Read(r *bufio.Reader) (s Sexp, err error) {
 	}
 	switch c {
 	case '{':
-		enc, err := r.ReadBytes('}')
+		var (
+			enc []byte
+			n   int
+		)
+		if enc, err = r.ReadBytes('}'); err != nil {
+			return nil, errors.Wrap(err, "couldn't read to end of transport-encoded S-expression")
+		}
 		acc := make([]byte, 0, len(enc)-1)
 		for _, c := range enc[:len(enc)-1] {
 			if bytes.IndexByte(whitespaceChar, c) == -1 {
@@ -358,28 +366,32 @@ func Read(r *bufio.Reader) (s Sexp, err error) {
 			}
 		}
 		str := make([]byte, base64.StdEncoding.DecodedLen(len(acc)))
-		n, err := base64.StdEncoding.Decode(str, acc)
-		if err != nil {
+		if n, err = base64.StdEncoding.Decode(str, acc); err != nil {
 			return nil, err
 		}
 		s, err = Read(bufio.NewReader(bytes.NewReader(str[:n])))
 		if err == nil || err == io.EOF {
 			return s, nil
-		} else {
-			return nil, err
 		}
+		return nil, errors.Wrap(err, "couldn't read decoded transport-encoded S-expression")
 	case '(':
 		l := List{}
 		// skip whitespace
 		for {
-			c, err := r.ReadByte()
+			var c byte
+			c, err = r.ReadByte()
+			if err != nil && err != io.EOF {
+				return nil, errors.Wrap(err, "couldn't read next byte of list")
+			}
 			switch {
 			case c == ')':
 				return l, err
 			case bytes.IndexByte(whitespaceChar, c) == -1:
-				r.UnreadByte()
-				element, err := Read(r)
-				if err != nil {
+				if err = r.UnreadByte(); err != nil {
+					return nil, errors.Wrap(err, "couldn't unread byte")
+				}
+				var element Sexp
+				if element, err = Read(r); err != nil {
 					return nil, err
 				}
 				l = append(l, element)
@@ -391,10 +403,6 @@ func Read(r *bufio.Reader) (s Sexp, err error) {
 	default:
 		return readString(r, c)
 	}
-	if err != nil {
-		return s, err
-	}
-	panic("Can't reach here")
 }
 
 func readString(r *bufio.Reader, first byte) (s Sexp, err error) {
@@ -421,47 +429,39 @@ func readString(r *bufio.Reader, first byte) (s Sexp, err error) {
 	return Atom{Value: str, DisplayHint: displayHint}, err
 }
 
-func readSimpleString(r *bufio.Reader, first byte) (s []byte, err error) {
+func readSimpleString(r *bufio.Reader, first byte) (b []byte, err error) {
 	switch {
 	case bytes.IndexByte(decimalDigit, first) > -1:
 		return readLengthDelimited(r, first)
 	case first == '#':
-		s, err := readHex(r)
-		if err != nil {
-			return nil, err
-		}
-		return s, nil
+		return readHex(r)
+
 	case first == '|':
-		s, err := readBase64(r)
-		if err != nil {
-			return nil, err
-		}
-		return s, nil
+		return readBase64(r)
 	case first == '"':
-		s, err := readQuotedString(r, -1)
-		if err != nil {
-			return nil, err
-		}
-		return s, nil
+		return readQuotedString(r, -1)
 	case bytes.IndexByte(tokenChar, first) > -1:
-		s = append(s, first)
+		b = append(b, first)
 		for {
-			c, err := r.ReadByte()
+			var c byte
+			c, err = r.ReadByte()
 			if bytes.IndexByte(tokenChar, c) == -1 {
-				r.UnreadByte()
-				return s, err
+				if err = r.UnreadByte(); err != nil {
+					return nil, err
+				}
+				return b, err
 			}
-			s = append(s, c)
+			b = append(b, c)
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
-	err = errors.New("can't readSimpleString")
-	return
+	return nil, errors.New("can't readSimpleString")
 }
 
-func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
+func readLengthDelimited(r *bufio.Reader, first byte) (b []byte, err error) {
+	var length int64
 	acc := make([]byte, 1)
 	acc[0] = first
 	for {
@@ -473,13 +473,13 @@ func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 		case bytes.IndexByte(decimalDigit, c) > -1:
 			acc = append(acc, c)
 		case c == ':':
-			length, err := strconv.ParseInt(string(acc), 10, 32)
-			if err != nil {
+			var n int
+			if length, err = strconv.ParseInt(string(acc), 10, 32); err != nil {
 				return nil, err
 			}
 			acc = make([]byte, 0, length)
 			buf := make([]byte, length)
-			for n, err := r.Read(buf); int64(len(acc)) < length; n, err = r.Read(buf[:length-int64(len(acc))]) {
+			for n, err = r.Read(buf); int64(len(acc)) < length; n, err = r.Read(buf[:length-int64(len(acc))]) {
 				acc = append(acc, buf[:n]...)
 				if err != nil {
 					return acc, err
@@ -487,59 +487,64 @@ func readLengthDelimited(r *bufio.Reader, first byte) (s []byte, err error) {
 			}
 			return acc, nil
 		case c == '#':
-			length, err := strconv.ParseInt(string(acc), 10, 32)
-			if err != nil {
+			if length, err = strconv.ParseInt(string(acc), 10, 32); err != nil {
 				return nil, err
 			}
-			s, err := readHex(r)
-			switch {
-			case len(s) != int(length):
-				return nil, fmt.Errorf("Expected %d bytes; got %d", length, len(s))
-			default:
-				return s, err
+			if b, err = readHex(r); err != nil {
+				return nil, errors.Wrap(err, "couldn't read length-delimited bytes")
 			}
+			if len(b) != int(length) {
+				return nil, errors.Errorf("expected %d bytes; got %d", length, len(b))
+			}
+			return b, err
 		case c == '|':
 			length, err := strconv.ParseInt(string(acc), 10, 32)
 			if err != nil {
 				return nil, err
 			}
-			s, err := readBase64(r)
-			switch {
-			case len(s) != int(length):
-				return nil, fmt.Errorf("Expected %d bytes; got %d", length, len(s))
-			default:
-				return s, err
+			if b, err = readBase64(r); err != nil {
+				return nil, errors.Wrap(err, "couldn't read Base64-encoded bytes")
 			}
+			if len(b) != int(length) {
+				return nil, errors.Errorf("expected %d bytes; got %d", length, len(b))
+			}
+			return b, err
 		default:
-			return nil, fmt.Errorf("Expected integer; found %c", c)
+			return nil, errors.Errorf("expected integer; found %c", c)
 		}
 	}
 }
 
-func readHex(r *bufio.Reader) (s []byte, err error) {
-	raw, err := r.ReadBytes('#')
-	acc := make([]byte, 0, len(raw)-1)
-	for _, c := range raw[:len(raw)-1] {
+func readHex(r *bufio.Reader) (b []byte, err error) {
+	var n int
+	if b, err = r.ReadBytes('#'); err != nil {
+		return nil, errors.Wrap(err, "couldn't read to #")
+	}
+	acc := make([]byte, 0, len(b)-1)
+	for _, c := range b[:len(b)-1] {
 		if bytes.IndexByte(whitespaceChar, c) == -1 {
 			acc = append(acc, c)
 		}
 	}
-	s = make([]byte, hex.DecodedLen(len(acc)))
-	n, err := hex.Decode(s, acc)
-	return s[:n], err
+	b = make([]byte, hex.DecodedLen(len(acc)))
+	n, err = hex.Decode(b, acc)
+	return b[:n], err
 }
 
-func readBase64(r *bufio.Reader) (s []byte, err error) {
-	raw, err := r.ReadBytes('|')
-	acc := make([]byte, 0, len(raw)-1)
-	for _, c := range raw[:len(raw)-1] {
+func readBase64(r *bufio.Reader) (b []byte, err error) {
+	var n int
+	if b, err = r.ReadBytes('|'); err != nil {
+		return nil, errors.Wrap(err, "couldn't read to |")
+	}
+	acc := make([]byte, 0, len(b)-1)
+	for _, c := range b[:len(b)-1] {
 		if bytes.IndexByte(whitespaceChar, c) == -1 {
 			acc = append(acc, c)
 		}
 	}
-	s = make([]byte, base64.StdEncoding.DecodedLen(len(acc)))
-	n, err := base64.StdEncoding.Decode(s, acc)
-	return s[:n], err
+	b = make([]byte, base64.StdEncoding.DecodedLen(len(acc)))
+	n, err = base64.StdEncoding.Decode(b, acc)
+	return b[:n], err
 }
 
 type quoteState int
@@ -551,7 +556,6 @@ const (
 	inReturnEscape
 	inHex1
 	inHex2
-	inOctal1
 	inOctal2
 	inOctal3
 )
