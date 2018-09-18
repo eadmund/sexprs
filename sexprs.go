@@ -22,7 +22,7 @@
 // advanced representation is string-oriented and more traditional in
 // appearance.
 //
-// The S-expression ("foo" "bar" ["bin"]"baz quux") is canonically:
+// The S-expression (foo bar [bin]"baz quux") is canonically:
 //    (3:foo3:bar[3:bin]8:quux)
 //
 // Among the valid advanced representations are:
