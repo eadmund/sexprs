@@ -264,6 +264,7 @@ func (l List) Pack() []byte {
 	return buf.Bytes()
 }
 
+// PackBuffer implements Sexp.
 func (l List) PackBuffer(buf *bytes.Buffer) {
 	buf.WriteString("(")
 	for _, datum := range l {
@@ -283,6 +284,7 @@ func (l List) String() string {
 	return buf.String()
 }
 
+// StringBuffer implements Sexp.
 func (l List) StringBuffer(buf *bytes.Buffer) {
 	buf.WriteString("(")
 	for i, datum := range l {
